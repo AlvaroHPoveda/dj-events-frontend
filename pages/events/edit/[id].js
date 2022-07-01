@@ -2,6 +2,7 @@ import moment from "moment";
 import { FaImage } from "react-icons/fa";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { parseCookies } from "@/helpers/index";
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
@@ -12,7 +13,7 @@ import ImageUpload from "@/components/ImageUpload";
 import { API_URL } from "@/config/index";
 import styles from "@/styles/Form.module.css";
 
-export default function EditEventPage({ evt }) {
+export default function EditEventPage({ evt, token }) {
   const [values, setValues] = useState({
     name: evt.attributes.name,
     performers: evt.attributes.performers,
@@ -52,12 +53,16 @@ export default function EditEventPage({ evt }) {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(dataFetch),
     });
 
     if (!res.ok) {
-      toast.error("Something went wrong");
+      if (res.status === 403 || res.status === 401) {
+        toast.error("Unauthorized");
+        return;
+      }
     } else {
       const evt = await res.json();
       const { data } = evt;
@@ -71,11 +76,15 @@ export default function EditEventPage({ evt }) {
   };
 
   const imageUploaded = async (e) => {
-    const res = await fetch (`${API_URL}/events?filters[id]=${evt.id}&populate=*`)
+    const res = await fetch(
+      `${API_URL}/events?filters[id]=${evt.id}&populate=*`
+    );
     const evtData = await res.json();
-    const {data} = evtData
-    setImagePreview(data[0].attributes.image.data.attributes.formats.thumbnail.url)
-    setShowModal(false)
+    const { data } = evtData;
+    setImagePreview(
+      data[0].attributes.image.data.attributes.formats.thumbnail.url
+    );
+    setShowModal(false);
   };
 
   return (
@@ -172,13 +181,19 @@ export default function EditEventPage({ evt }) {
         </button>
       </div>
       <Modal show={showModal} onClose={() => setShowModal(false)}>
-        <ImageUpload evtId={evt.id} imageUploaded={imageUploaded} />
+        <ImageUpload
+          evtId={evt.id}
+          imageUploaded={imageUploaded}
+          token={token}
+        />
       </Modal>
     </Layout>
   );
 }
 
-export async function getServerSideProps({ params: { id } }) {
+export async function getServerSideProps({ params: { id }, req }) {
+  const { token } = parseCookies(req);
+
   const res = await fetch(`${API_URL}/events?filters[id]=${id}&populate=*`);
   const evt = await res.json();
   const { data } = evt;
@@ -186,6 +201,7 @@ export async function getServerSideProps({ params: { id } }) {
   return {
     props: {
       evt: data[0],
+      token,
     },
   };
 }
